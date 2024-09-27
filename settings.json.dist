@@ -1,0 +1,15 @@
+{
+  "token": "DISCORD_BOT_TOKEN",
+  "download_folder": "TARGET_FOLDER_TO_DOWNLOAD_IMAGES_TO",
+  "servers": {
+    "DISCORD_SERVER_ID": {
+      "server_name": "SERVER_NAME",
+      "channels": {
+        "CHANNEL_ID": {
+          "channel_name": "CHANNEL_NAME",
+          "last_parsed_message_time": "2024-01-01"
+        }
+      }
+    }
+  }
+}
