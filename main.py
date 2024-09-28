@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from datetime import datetime
 
@@ -102,19 +103,20 @@ def get_image_filename_from_url(url: str) -> str:
 
 
 # Function to download the image
-async def download_image(url, folder, filename):
-    filepath = os.path.join(folder, filename)
+async def download_image(url: str, filepath: str) -> bool:
     if os.path.isfile(filepath):
         print(f"Already downloaded {filepath}")
-        return
+        return False
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status == 200:
-                with open(os.path.join(folder, filename), "wb") as f:
+                with open(filepath, "wb") as f:
                     f.write(await resp.read())
-                print(f"Downloaded {filename}")
+                print(f"Downloaded {filepath}")
+                return True
             elif resp.status == 404:
                 print(f"404 error when trying to download {url}", file=sys.stderr)
+                return False
             else:
                 raise FileNotFoundError(f"HTTP {resp.status} error ({resp.url}): {resp.content}")
 
@@ -132,6 +134,7 @@ def save_settings(settings: dict):
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
+    first_downloaded_filepath = None
 
     try:
         # Iterate over each server
@@ -158,14 +161,18 @@ async def on_ready():
                                 for url in urls:
                                     filename = get_image_filename_from_url(url)
                                     filename = f"{message.id}_{filename}"
-                                    await download_image(url, DOWNLOAD_FOLDER, filename)
-
+                                    filepath = os.path.join(DOWNLOAD_FOLDER, filename)
+                                    if await download_image(url, filepath) and not first_downloaded_filepath:
+                                        first_downloaded_filepath = filepath
                                 update_parsed_message_time(message, channel_settings)
                         finally:
                             save_settings(settings)
     finally:
         # Stop the bot after scanning
         await bot.close()
+
+    if first_downloaded_filepath:
+        subprocess.Popen(["explorer", "/select,", os.path.abspath(first_downloaded_filepath)])
 
 
 # Start the bot
