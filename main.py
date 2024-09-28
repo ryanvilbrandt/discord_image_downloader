@@ -23,7 +23,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 if not os.path.isfile("settings.json"):
     shutil.copy("settings.json.dist", "settings.json")
     print("No settings.json file found. Created a new file from the default. "
-          "Please add your bot token and any other information and then run this script again.")
+          "Please add your bot token and all other needed information and then run this script again.")
     raise SystemExit(0)
 
 with open("settings.json") as f:
@@ -43,9 +43,12 @@ def parse_start_time(timestamp: str) -> datetime:
     if not timestamp:
         return datetime(2024, 1, 1)
     try:
-        return datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S%z")
+        return datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f%z")
     except ValueError:
-        dt = datetime.strptime(timestamp, "%Y-%m-%d")
+        try:
+            dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            dt = datetime.strptime(timestamp, "%Y-%m-%d")
         return dt.replace(tzinfo=pytz.UTC)
 
 
@@ -117,7 +120,7 @@ async def download_image(url, folder, filename):
 
 
 def update_parsed_message_time(message: Message, channel_settings: dict):
-    channel_settings["last_parsed_message_time"] = message.created_at.strftime("%Y-%m-%d %H:%M:%S%z")
+    channel_settings["last_parsed_message_time"] = message.created_at.strftime("%Y-%m-%d %H:%M:%S.%f%z")
 
 
 def save_settings(settings: dict):
