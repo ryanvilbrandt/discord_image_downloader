@@ -5,10 +5,12 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime
+import ssl
 
 import aiohttp
 import discord
 import pytz
+from aiohttp import ServerDisconnectedError
 from discord import Message
 from discord.ext import commands
 
@@ -30,7 +32,7 @@ if not os.path.isfile("settings.json"):
 with open("settings.json") as f:
     settings = json.load(f)
 
-# Replace with your bot'"'s token
+# Replace with your bot's token
 DISCORD_TOKEN = settings["token"]
 
 # Folder to save images
@@ -67,6 +69,10 @@ def get_image_urls(message: Message) -> list[str]:
                 m = re.search(fr"(\.({extensions}))\??", url)
                 if m:
                     urls.append(url)
+                if "cdn.bsky.app" in url:
+                    m = re.search(fr"(@({extensions}))$", url)
+                    if m:
+                        urls.append(url)
         if embed.thumbnail.url:
             url = embed.thumbnail.url
             if "rendercombined" not in url:  # Skip fixvx combined images, so we'll open the browser to them later
@@ -94,11 +100,13 @@ def get_image_urls(message: Message) -> list[str]:
 
 def get_image_filename_from_url(url: str) -> str:
     url = url.split("?")[0].rsplit("/", 1)[1]
-    if url.endswith(":large"):
-        url = url[:-6]
+    if ":" in url:
+        url = url.split(":")[0]
     m = re.search(r"(@(jpg|jpeg|gif|png))$", url)
     if m:
         url = url.replace(m.group(1), m.group(1).replace("@", "."))
+    if len(url) > 50:
+        url = url[-50:]
     return url
 
 
@@ -107,18 +115,31 @@ async def download_image(url: str, filepath: str) -> bool:
     if os.path.isfile(filepath):
         print(f"Already downloaded {filepath}")
         return False
+
+    # Create an SSL context that ignores certificate verification
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 200:
-                with open(filepath, "wb") as f:
-                    f.write(await resp.read())
-                print(f"Downloaded {filepath}")
-                return True
-            elif resp.status == 404:
-                print(f"404 error when trying to download {url}", file=sys.stderr)
-                return False
-            else:
-                raise FileNotFoundError(f"HTTP {resp.status} error ({resp.url}): {resp.content}")
+        try:
+            async with session.get(url, ssl=ssl_context) as resp:
+                if resp.status == 200:
+                    with open(filepath, "wb") as f:
+                        f.write(await resp.read())
+                    print(f"Downloaded {filepath}")
+                    return True
+                elif resp.status == 404:
+                    print(f"404 error when trying to download {url}", file=sys.stderr)
+                    return False
+                elif resp.status == 429:
+                    print("HTTP 429 error, opening in browser")
+                    os.system(f"start \"\" {url}")
+                else:
+                    raise FileNotFoundError(f"HTTP {resp.status} error ({resp.url}): {resp.content}")
+        except ServerDisconnectedError as e:
+            print(f"Failed to download {url}: {e}", file=sys.stderr)
+            return False
 
 
 def update_parsed_message_time(message: Message, channel_settings: dict):
